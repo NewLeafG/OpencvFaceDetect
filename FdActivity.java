@@ -12,6 +12,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.MimeTypeMap;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.Toast;
 
@@ -89,7 +90,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
     private int mDetectorType = NATIVE_DETECTOR;
     private String[] mDetectorName;
 
-    private float mRelativeFaceSize = 0.1f;
+    private float mRelativeFaceSize = 0.2f;
     private int mAbsoluteFaceSize = 0;
 
     private CamView mOpenCvCameraView;
@@ -132,25 +133,33 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView.setVisibility(CameraBridgeViewBase.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
 
-        ImageButton btn = (ImageButton) findViewById(R.id.btnImgSelector);
-        btn.setOnClickListener(new View.OnClickListener() {
+        ImageButton imgBtn = (ImageButton) findViewById(R.id.btnImgSelector);
+        imgBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 onBtnImgSltClicked(v);
             }
         });
-        btn = (ImageButton) findViewById(R.id.btn_takePhoto);
-        btn.setOnClickListener(new View.OnClickListener() {
+        imgBtn = (ImageButton) findViewById(R.id.btn_takePhoto);
+        imgBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 onTakePhotoClicked(v);
             }
         });
-        btn = (ImageButton) findViewById(R.id.btn_switchCam);
-        btn.setOnClickListener(new View.OnClickListener() {
+        imgBtn = (ImageButton) findViewById(R.id.btn_switchCam);
+        imgBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 onSwitchCamClicked(v);
+            }
+        });
+
+        Button btn=(Button)findViewById(R.id.btn_faceReset);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onFaceReset(v) ;
             }
         });
 
@@ -166,6 +175,11 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         mNativeDetectorProfile = loadNativeCascadeFile(R.raw.haarcascade_profileface, "native_haarcascade_profileface");
 
         mOpenCvCameraView.enableView();
+    }
+
+    private void onFaceReset(View v) {
+        Button btn=(Button)v;
+        btn.setText("Clicked");
     }
 
 
@@ -231,6 +245,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
+        long previous = System.currentTimeMillis();
 
         mRgba = inputFrame.rgba();
 //        mGrayRaw = inputFrame.gray();
@@ -270,7 +285,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 //                Log.d(TAG, "GetBestMatch: rectTwo "+String.valueOf(searchROI.isSubmatrix()));
                 target = m_faceTracker.GetBestMatch(searchArea, facesArray);
                 if (m_faceTracker.Verify(target)) {
-                    m_faceTracker.UpdateData(target, mRgba, true);
+                    m_faceTracker.UpdateData(target, mRgba, false);
 //                Log.d(TAG, "onCameraFrame: Searching face ended.");
                     Log.d(TAG, "onCameraFrame: rectSnd " + String.valueOf(target.tl().x));
                 } else {
@@ -287,7 +302,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
                 if ((null == target)) {
                     Log.d(TAG, "onCameraFrame: Null returned!");
                     m_faceTracker.m_faceLocated = false;
-                    m_faceTracker.m_colorSetted = false;
+//                    m_faceTracker.m_colorSet = false;
                     return mRgba;
                 }
 //                m_colorCount--;
@@ -307,7 +322,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
                 int verifiedCnt = 0;
 
                 for (int i = 0; i < len; i++) {
-                    if (VerifyFace(new Mat(mGray, facesArray[i]))) {
+                    if ( VerifyFace(facesArray[i])) {
                         verifiedIndex[verifiedCnt] = i;
                         verifiedCnt++;
                     }
@@ -344,7 +359,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
         if (!VerifyTarget(target)) {
             m_faceTracker.m_faceLocated = false;
-            m_faceTracker.m_colorSetted = false;
+            m_faceTracker.m_colorSet = false;
 
             return mRgba;
         }
@@ -352,6 +367,10 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         Imgproc.rectangle(mRgba, target.tl(), target.br(), FACE_RECT_COLOR_REC, -1);
         Imgproc.putText(mRgba, String.valueOf(FaceTracker.m_lastPosition), new Point((target.tl().x + target.br().x) / 2, (target.tl().y + target.br().y) / 2), 3, m_fontScale, WHITE_COLOR, 3);
         Imgproc.putText(mRgba, String.valueOf(target.area()), new Point(target.tl().x, target.tl().y), 3, m_fontScale, WHITE_COLOR, 1);
+
+        long current = System.currentTimeMillis();
+        long elapsed = current - previous;
+        Imgproc.putText(mRgba, String.format("FPS = %5.2f",1000.0 / elapsed), new org.opencv.core.Point(20, 30), 3, 1, new Scalar(255, 255, 255, 255), 3);
 
 //        m_Detector.findMainColor(new Mat(mRgba, target));
 //        m_Detector.process(mRgba);
@@ -847,7 +866,15 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         return null;
     }
 
-    private boolean VerifyFace(Mat faceROI) {
+    private boolean VerifyFace(Rect faceRect) {
+
+        Mat faceROI;
+        if(m_faceTracker.m_colorSet) {
+            faceROI= new Mat(mRgba,faceRect);
+            return m_faceTracker.VerifyColor(faceROI);
+        }
+
+        faceROI= new Mat(mGray,faceRect);
         MatOfRect eyes = new MatOfRect();
         if (mJavaDetectorEye != null)
             mJavaDetectorEye.detectMultiScale(faceROI, eyes, 1.1, 2, 2, // TODO: objdetect.CV_HAAR_SCALE_IMAGE
