@@ -19,10 +19,16 @@ public class ColorBlobDetector {
     // Lower and Upper bounds for range checking in HSV color space
     private Scalar mLowerBound = new Scalar(0);
     private Scalar mUpperBound = new Scalar(0);
+    private Scalar mLowerBoundForCompare = new Scalar(0);
+    private Scalar mUpperBoundForCompare = new Scalar(0);
     // Minimum contour area in percent for contours filtering
     private static double mMinContourArea = 0.1;
     // Color radius for range checking in HSV color space
-    private Scalar mColorRadius = new Scalar(25, 50, 50, 0);
+    private Scalar mColorRadius = new Scalar(15, 30, 30, 0);
+    private Scalar mColorRadiusForCompare = new Scalar(10, 20, 20, 0);
+    //    private Scalar mColorRadius = new Scalar(25, 50, 50, 0);
+    private Scalar m_mainColor = new Scalar(15, 30, 30, 0);
+//    private Scalar m_compareColor = new Scalar(15, 30, 30, 0);
     private Mat mSpectrum = new Mat();
     private List<MatOfPoint> mContours = new ArrayList<MatOfPoint>();
     public int m_maxIndex = 0;
@@ -44,20 +50,38 @@ public class ColorBlobDetector {
     }
 
     public void setHsvColor(Scalar hsvColor) {
-        double minH = (hsvColor.val[0] >= mColorRadius.val[0]) ? hsvColor.val[0] - mColorRadius.val[0] : 0;
-        double maxH = (hsvColor.val[0] + mColorRadius.val[0] <= 255) ? hsvColor.val[0] + mColorRadius.val[0] : 255;
 
-        mLowerBound.val[0] = minH;
-        mUpperBound.val[0] = maxH;
+                m_mainColor = hsvColor;
 
-        mLowerBound.val[1] = hsvColor.val[1] - mColorRadius.val[1];
-        mUpperBound.val[1] = hsvColor.val[1] + mColorRadius.val[1];
+                double minH = (hsvColor.val[0] >= mColorRadiusForCompare.val[0]) ? hsvColor.val[0] - mColorRadiusForCompare.val[0] : 0;
+                double maxH = (hsvColor.val[0] + mColorRadiusForCompare.val[0] <= 255) ? hsvColor.val[0] + mColorRadiusForCompare.val[0] : 255;
 
-        mLowerBound.val[2] = hsvColor.val[2] - mColorRadius.val[2];
-        mUpperBound.val[2] = hsvColor.val[2] + mColorRadius.val[2];
+                mLowerBound.val[0] = minH;
+                mUpperBound.val[0] = maxH;
 
-        mLowerBound.val[3] = 0;
-        mUpperBound.val[3] = 255;
+                mLowerBound.val[1] = hsvColor.val[1] - mColorRadius.val[1];
+                mUpperBound.val[1] = hsvColor.val[1] + mColorRadius.val[1];
+
+                mLowerBound.val[2] = hsvColor.val[2] - mColorRadius.val[2];
+                mUpperBound.val[2] = hsvColor.val[2] + mColorRadius.val[2];
+
+                mLowerBound.val[3] = 0;
+                mUpperBound.val[3] = 255;
+
+                minH = (hsvColor.val[0] >= mColorRadiusForCompare.val[0]) ? hsvColor.val[0] - mColorRadiusForCompare.val[0] : 0;
+                maxH = (hsvColor.val[0] + mColorRadiusForCompare.val[0] <= 255) ? hsvColor.val[0] + mColorRadiusForCompare.val[0] : 255;
+
+                mLowerBoundForCompare.val[0] = minH;
+                mUpperBoundForCompare.val[0] = maxH;
+
+                mLowerBoundForCompare.val[1] = hsvColor.val[1] - mColorRadiusForCompare.val[1];
+                mUpperBoundForCompare.val[1] = hsvColor.val[1] + mColorRadiusForCompare.val[1];
+
+                mLowerBoundForCompare.val[2] = hsvColor.val[2] - mColorRadiusForCompare.val[2];
+                mUpperBoundForCompare.val[2] = hsvColor.val[2] + mColorRadiusForCompare.val[2];
+
+                mLowerBoundForCompare.val[3] = 0;
+                mUpperBoundForCompare.val[3] = 255;
 
 //        Mat spectrumHsv = new Mat(1, (int) (maxH - minH), CvType.CV_8UC3);
 //
@@ -134,15 +158,19 @@ public class ColorBlobDetector {
         return mContours;
     }
 
-    public void findMainColor(Mat mRgba, boolean colorSetted) {
+    public Scalar findMainColor(Mat mRgba, boolean colorSetted) {
 
+        /**
+         * If colorSetted is true, then we can use the exist color to reduce the
+         * probability of finding out wrong main color.
+         */
         if (colorSetted) {
             process(mRgba);
             if (0 == mContours.size()) {
-                return;
+                return null;
             }
             Rect rlt = boundingRect(mContours.get(0));
-            if (rlt.width < 5 || rlt.height < 5) return;
+            if (rlt.width < 5 || rlt.height < 5) return null;
 
             mRgba = mRgba.submat(rlt);
         }
@@ -160,6 +188,7 @@ public class ColorBlobDetector {
 
         Scalar mainColor = new Scalar(0);
         Mat RegionRgba = new Mat(), RegionHsv = new Mat();
+        Scalar previousMainColor=m_mainColor;
         for (int i = 1; i < m_rows - 1; i++) {
             for (int j = 1; j < m_cols - 1; j++) {
                 Rect rect = new Rect();
@@ -188,8 +217,20 @@ public class ColorBlobDetector {
                 }
             }
         }
-        setHsvColor(mainColor);
+//        setHsvColor(mainColor);
+        setHsvColor(previousMainColor);
         RegionRgba.release();
         RegionHsv.release();
+
+        return mainColor;
+    }
+
+    public boolean Compare(Scalar color){
+        if((color.val[0]<mLowerBoundForCompare.val[0])||(color.val[0]>mUpperBoundForCompare.val[0]))return false;
+        if((color.val[1]<mLowerBoundForCompare.val[1])||(color.val[1]>mUpperBoundForCompare.val[1]))return false;
+        if((color.val[2]<mLowerBoundForCompare.val[2])||(color.val[2]>mUpperBoundForCompare.val[2]))return false;
+        if((color.val[3]<mLowerBoundForCompare.val[3])||(color.val[3]>mUpperBoundForCompare.val[3]))return false;
+
+        return true;
     }
 }
