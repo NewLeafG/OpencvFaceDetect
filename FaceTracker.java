@@ -19,7 +19,7 @@ import static org.opencv.imgproc.Imgproc.boundingRect;
  */
 public class FaceTracker {
     public boolean m_faceLocated = false;
-    public boolean m_colorSetted = false;
+    public boolean m_colorSet = false;
     private static Rect m_searchArea = new Rect();
     private static Rect m_target = new Rect();
     public static Point m_lastPosition = new Point();
@@ -140,8 +140,8 @@ public class FaceTracker {
 
         if (updateColor) {
             try {
-                m_colorDetector.findMainColor(rgba.submat(target), m_colorSetted);
-                m_colorSetted = true;
+                m_colorDetector.setHsvColor(m_colorDetector.findMainColor(rgba.submat(target), m_colorSet));
+                m_colorSet = true;
             } catch (Exception e) {
                 Log.d("findMainColor", "findMainColor: " + e.getMessage());
             }
@@ -155,7 +155,7 @@ public class FaceTracker {
         if (0 == contours.size()) {
             return rgba;
         }
-        MatOfPoint contour = contours.get(0);
+//        MatOfPoint contour = contours.get(0);
 
         Imgproc.drawContours(rgba, contours, -1, CONTOUR_COLOR, 6);
         return rgba;
@@ -179,5 +179,13 @@ public class FaceTracker {
         } else {
             return false;
         }
+    }
+
+    public boolean VerifyColor(Mat faceROI) {
+        Scalar color = m_colorDetector.findMainColor(faceROI, m_colorSet);
+
+        if (null == color) return false;
+
+        return m_colorDetector.Compare(color);
     }
 }
